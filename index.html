@@ -1,0 +1,1203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="robots" content="noindex">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Adaptive Brightness Prototype</title>
+  <style>
+    :root {
+      --sw: 1440px;
+      --sh: 900px;
+      --scene-width: max(var(--sw), calc(var(--sh) * 1440 / 900));
+
+      --clockface-left: calc(var(--sw) / 2 - 0.085 * var(--scene-width));
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Helvetica Neue', sans-serif;
+      background: #0a0e1a;
+    }
+
+    body {
+      position: relative;
+    }
+
+    .stage {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: var(--sw);
+      height: var(--sh);
+      overflow: hidden;
+      transform-origin: 0 0;
+    }
+
+    .rotate-hint {
+      display: none;
+      position: fixed;
+      left: 0;
+      right: 0;
+      bottom: 24px;
+      text-align: center;
+      color: rgba(255, 255, 255, 0.6);
+      font-size: 14px;
+      pointer-events: none;
+    }
+
+    @media (orientation: portrait) and (max-width: 700px) and (pointer: coarse) {
+      .rotate-hint { display: block; }
+    }
+
+    .mode-section {
+      position: absolute;
+      top: 64px;
+      left: 64px;
+      z-index: 30;
+    }
+
+    .mode-header {
+      color: #fff;
+      font-size: 28px;
+      font-weight: 700;
+      margin-bottom: 16px;
+    }
+
+    .mode-toggle {
+      display: flex;
+      align-items: center;
+      background: #1d2635;
+      border-radius: 46px;
+      padding: 8px;
+      width: 364px;
+      height: 66px;
+      position: relative;
+    }
+
+    .mode-toggle-indicator {
+      position: absolute;
+      top: 8px;
+      left: 8px;
+      width: 174px;
+      height: 50px;
+      background: #598cff;
+      border-radius: 80px;
+      transition: left 0.3s ease;
+    }
+
+    .mode-toggle[data-mode="absolute"] .mode-toggle-indicator {
+      left: 182px;
+    }
+
+    .mode-toggle-btn {
+      flex: 1;
+      height: 50px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #c4d6f0;
+      font-size: 17px;
+      font-weight: 400;
+      white-space: nowrap;
+      border: none;
+      background: none;
+      cursor: pointer;
+      position: relative;
+      z-index: 1;
+      border-radius: 80px;
+      user-select: none;
+    }
+
+    .mode-toggle-btn.active {
+      color: #fff;
+    }
+
+    .mode-toggle-btn:disabled {
+      cursor: not-allowed;
+      opacity: 0.5;
+    }
+
+    .scene-container {
+      position: absolute;
+      top: 0;
+      left: 50%;
+      transform: translateX(-50%);
+      width: var(--scene-width);
+      height: max(var(--sh), calc(var(--sw) * 900 / 1440));
+      overflow: visible;
+    }
+
+    .scene-layer {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      opacity: 0;
+      transition: opacity 0.4s ease;
+    }
+
+    .scene-layer img {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+
+    .scene-layer.active {
+      opacity: 1;
+    }
+
+    .device-container {
+      position: absolute;
+      top: 59.5%;
+      left: 53.3%;
+      transform: translate(-50%, -50%);
+      width: 23.6%;      height: 34.8%;      z-index: 10;
+    }
+
+    .clock-face {
+      width: 100%;
+      height: 100%;
+      border-radius: 50%;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .clock-face-bg {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      transition: opacity 0.5s ease;
+    }
+
+    .clock-face-night {
+      opacity: 0;
+    }
+
+    .clock-face.night-active .clock-face-night {
+      opacity: 1;
+    }
+
+    .clock-face.night-active .clock-face-day {
+      opacity: 0;
+    }
+
+    .clock-hands {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+    }
+
+    .clock-hand {
+      position: absolute;
+      bottom: 50%;
+      left: 50%;
+      transform-origin: bottom center;
+    }
+
+    .hand-hour {
+      width: 7.67%;
+      height: 35.4%;
+      margin-left: -3.835%;
+      background: #00d4ff;
+      border-radius: 11px;
+      transform: rotate(180deg);
+      transition: background 0.5s ease;
+    }
+
+    .hand-minute {
+      width: 5.55%;
+      height: 46%;
+      margin-left: -2.775%;
+      background: #3a4ee5;
+      border-radius: 8px;
+      transform: rotate(60deg);
+      transition: background 0.5s ease;
+    }
+
+    .hand-second {
+      width: 1.06%;
+      height: 49.56%;
+      margin-left: -0.53%;
+      background: #f6bf1b;
+      border-radius: 2px;
+      transform: rotate(210deg);
+      transition: background 0.5s ease;
+    }
+
+    .device-scrim {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      border-radius: 50%;
+      background: #000;
+      opacity: 0.85;
+      pointer-events: none;
+      transition: opacity 0.3s ease;
+    }
+
+    .right-rail {
+      position: absolute;
+      bottom: 12px;
+      right: calc(var(--sw) * 0.1);
+      z-index: 20;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 14px;
+    }
+
+    .controls-stack {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      justify-content: flex-end;
+      min-height: 170px;
+    }
+
+    .adaptive-toggle-container {
+      display: flex;
+      justify-content: center;
+      pointer-events: none;
+    }
+
+    .adaptive-toggle {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      width: 200px;
+      background: #1d2635;
+      border-radius: 46px;
+      padding: 10px 14px 10px 24px;
+      pointer-events: all;
+      user-select: none;
+    }
+
+    .adaptive-toggle-label {
+      color: #c4d6f0;
+      font-size: 16px;
+      font-weight: 400;
+      text-align: left;
+    }
+
+    .adaptive-switch {
+      position: relative;
+      width: 40px;
+      height: 24px;
+      cursor: pointer;
+    }
+
+    .adaptive-switch-bg {
+      position: absolute;
+      inset: 0;
+      background: #3470eb;
+      border-radius: 999px;
+      transition: background 0.3s ease;
+    }
+
+    .adaptive-switch.off .adaptive-switch-bg {
+      background: #4a5568;
+    }
+
+    .adaptive-switch-thumb {
+      position: absolute;
+      top: 2px;
+      right: 2px;
+      width: 20px;
+      height: 20px;
+      background: #fff;
+      border-radius: 50%;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+      transition: transform 0.3s ease;
+    }
+
+    .adaptive-switch.off .adaptive-switch-thumb {
+      transform: translateX(-16px);
+    }
+
+    #adaptive-toggle-container .adaptive-toggle.merged-bottom {
+      border-radius: 22px 22px 0 0;
+    }
+
+    .curve-mode-container {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      pointer-events: none;
+    }
+
+    .curve-mode-container.hidden {
+      display: none;
+    }
+
+    .curve-mode {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 4px;
+      width: 200px;
+      background: #1d2635;
+      border-radius: 0 0 22px 22px;
+      padding: 4px 14px 14px 24px;
+      pointer-events: all;
+      user-select: none;
+    }
+
+    .curve-radio {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      width: 100%;
+      border: none;
+      background: none;
+      cursor: pointer;
+      padding: 4px 0;
+      color: rgba(255, 255, 255, 0.6);
+      font-size: 13px;
+      font-weight: 500;
+      white-space: nowrap;
+      transition: color 0.2s ease;
+    }
+
+    .curve-radio:hover { color: rgba(255, 255, 255, 0.85); }
+
+    .curve-radio-dot {
+      flex-shrink: 0;
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      border: 2px solid rgba(255, 255, 255, 0.35);
+      box-sizing: border-box;
+      position: relative;
+      transition: border-color 0.2s ease;
+    }
+
+    .curve-radio.active {
+      color: #fff;
+    }
+
+    .curve-radio.active .curve-radio-dot {
+      border-color: #4a9eff;
+    }
+
+    .curve-radio.active .curve-radio-dot::after {
+      content: '';
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #4a9eff;
+    }
+
+    .night-mode-toggle-container {
+      margin-top: 12px;
+    }
+
+    .night-hands .hand-hour {
+      background: #c42b2b;
+    }
+
+    .night-hands .hand-minute {
+      background: #7f1b24;
+    }
+
+    .night-hands .hand-second {
+      background: #7f1b24;
+    }
+
+    .timeline-container {
+      position: absolute;
+      top: 120px;
+      left: max(452px, calc(var(--clockface-left) - 40px));
+      right: calc(var(--sw) * 0.1 + 72px);
+      width: auto;
+      max-width: 600px;
+      z-index: 20;
+    }
+
+    .lux-display {
+      text-align: center;
+      margin-bottom: 12px;
+      color: #fff;
+      font-size: 24px;
+      font-weight: 600;
+      letter-spacing: 0.5px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+    }
+
+    .play-btn {
+      position: absolute;
+      left: 0;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 28px;
+      height: 28px;
+      border: none;
+      background: none;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0;
+    }
+
+    .play-btn svg {
+      width: 28px;
+      height: 28px;
+      fill: none;
+      stroke: #fff;
+      stroke-width: 1.5;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+
+    .play-btn .icon-pause { display: none; }
+    .play-btn.playing .icon-play { display: none; }
+    .play-btn.playing .icon-pause { display: block; }
+
+    .lux-display .lux-value {
+      font-size: 28px;
+    }
+
+    .lux-display .lux-unit {
+      font-size: 14px;
+      text-transform: uppercase;
+      opacity: 0.8;
+      margin-left: 2px;
+    }
+
+    .timeline-track {
+      position: relative;
+      width: 100%;
+      height: 40px;
+      display: flex;
+      align-items: center;
+    }
+
+    .timeline-line {
+      position: absolute;
+      top: 50%;
+      left: 0;
+      right: 0;
+      height: 2px;
+      background: rgba(255, 255, 255, 0.4);
+      transform: translateY(-50%);
+    }
+
+    .timeline-line::before,
+    .timeline-line::after {
+      content: '';
+      position: absolute;
+      top: 50%;
+      width: 8px;
+      height: 8px;
+      border: solid rgba(255, 255, 255, 0.4);
+      border-width: 0 2px 2px 0;
+    }
+
+    .timeline-line::before {
+      left: 0;
+      transform: translateY(-50%) rotate(135deg);
+    }
+
+    .timeline-line::after {
+      right: 0;
+      transform: translateY(-50%) rotate(-45deg);
+    }
+
+    .timeline-slider {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 100%;
+      height: 40px;
+      background: transparent;
+      position: relative;
+      z-index: 2;
+      cursor: pointer;
+    }
+
+    .timeline-slider::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      background: #4da6ff;
+      border: 3px solid #fff;
+      box-shadow: 0 0 8px rgba(77, 166, 255, 0.5);
+      cursor: grab;
+      margin-top: -9px;
+    }
+
+    .timeline-slider::-webkit-slider-thumb:active {
+      cursor: grabbing;
+      transform: scale(1.1);
+    }
+
+    .timeline-slider::-webkit-slider-runnable-track {
+      height: 2px;
+      background: transparent;
+    }
+
+    .timeline-labels {
+      display: flex;
+      justify-content: space-between;
+      margin-top: 8px;
+      padding: 0 4px;
+    }
+
+    .timeline-labels span {
+      color: rgba(255, 255, 255, 0.7);
+      font-size: 13px;
+      font-weight: 500;
+      letter-spacing: 0.5px;
+    }
+
+    .brightness-container {
+      --sl-scale: 0.72;
+      --sl-w: calc(104px * var(--sl-scale));
+      --sl-h: calc(272px * var(--sl-scale));
+      --sl-inset: calc(9.244px * var(--sl-scale));
+      --sl-fill-radius: calc(16px * var(--sl-scale));
+      --sl-icon: calc(24.2838px * var(--sl-scale));
+      --sl-icon-center: calc(52.57px * var(--sl-scale));
+      --sl-track: #213148;
+      --sl-accent: #598cff;
+      --sl-icon-off: #c6d4fb;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      width: var(--sl-w);
+    }
+
+    .brightness-clip {
+      position: absolute;
+      inset: var(--sl-inset);
+      border-radius: calc((var(--sl-w) - 2 * var(--sl-inset)) / 2);
+      overflow: hidden;
+    }
+
+    .brightness-fill {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      width: 100%;
+      background: var(--sl-accent);
+      border-radius: var(--sl-fill-radius) var(--sl-fill-radius) 0 0;
+      overflow: hidden;
+      transition: height 0.3s ease;
+    }
+
+    .brightness-sun {
+      position: absolute;
+      left: 50%;
+      width: var(--sl-icon);
+      height: var(--sl-icon);
+      transform: translateX(-50%);
+      pointer-events: none;
+    }
+
+    .brightness-sun svg {
+      display: block;
+      width: 100%;
+      height: 100%;
+    }
+
+    .brightness-sun-off {
+      bottom: calc(var(--sl-icon-center) - var(--sl-icon) / 2);
+    }
+
+    .brightness-sun-off svg { fill: var(--sl-icon-off); }
+
+    .brightness-sun-on {
+      bottom: calc(var(--sl-icon-center) - var(--sl-icon) / 2 - var(--sl-inset));
+    }
+
+    .brightness-sun-on svg { fill: var(--sl-track); }
+
+    .perceptual-toggle {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 7px;
+      margin-bottom: 14px;
+      cursor: pointer;
+      user-select: none;
+      white-space: nowrap;
+    }
+
+    .perceptual-toggle.hidden { display: none; }
+
+    .perceptual-box {
+      width: 18px;
+      height: 18px;
+      border-radius: 4px;
+      border: 1.5px solid rgba(255, 255, 255, 0.45);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background 0.15s ease, border-color 0.15s ease;
+    }
+
+    .perceptual-toggle:hover .perceptual-box { border-color: rgba(255, 255, 255, 0.7); }
+
+    .perceptual-toggle:focus-visible {
+      outline: 2px solid #4a9eff;
+      outline-offset: 3px;
+      border-radius: 4px;
+    }
+
+    .perceptual-toggle.checked .perceptual-box {
+      background: #4a9eff;
+      border-color: #4a9eff;
+    }
+
+    .perceptual-box svg {
+      width: 12px;
+      height: 12px;
+      fill: none;
+      stroke: #fff;
+      stroke-width: 2;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      opacity: 0;
+    }
+
+    .perceptual-toggle.checked .perceptual-box svg { opacity: 1; }
+
+    .perceptual-label {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      color: rgba(255, 255, 255, 0.85);
+      font-size: 12px;
+      font-weight: 500;
+      line-height: 1.35;
+      text-align: center;
+    }
+
+    .perceptual-sub {
+      color: rgba(255, 255, 255, 0.5);
+      font-size: 11px;
+      font-weight: 400;
+    }
+
+    .perceptual-rec { color: rgba(111, 178, 255, 0.8); }
+
+    .brightness-reset {
+      margin-top: 14px;
+      width: 32px;
+      height: 32px;
+      border: none;
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 8px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background 0.2s ease, opacity 0.3s ease;
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .brightness-reset.visible {
+      opacity: 1;
+      pointer-events: all;
+    }
+
+    .brightness-reset:hover {
+      background: rgba(255, 255, 255, 0.2);
+    }
+
+    .brightness-reset svg {
+      width: 16px;
+      height: 16px;
+      fill: none;
+      stroke: rgba(255, 255, 255, 0.8);
+      stroke-width: 1.5;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+
+    .brightness-track {
+      position: relative;
+      width: var(--sl-w);
+      height: var(--sl-h);
+      border-radius: calc(var(--sl-w) / 2);
+      background: var(--sl-track);
+      cursor: pointer;
+      touch-action: none;
+    }
+
+    .brightness-track.user-active .brightness-fill {
+      background: #f6bf1b;
+      transition: none;
+    }
+
+    .brightness-track.disabled {
+      opacity: 0.4;
+      pointer-events: none;
+      cursor: not-allowed;
+    }
+
+    .graph-band {
+      fill: rgba(255, 255, 255, 0.07);
+      stroke: none;
+      pointer-events: none;
+    }
+
+    .graph-ghost-dot {
+      fill: none;
+      stroke: rgba(246, 191, 27, 0.4);
+      stroke-width: 1.5;
+      stroke-dasharray: 3 2;
+    }
+
+    .graph-sup-dot {
+      fill: #172232;
+      stroke: #f6bf1b;
+      stroke-width: 1.75;
+    }
+
+    .graph-sup-leader {
+      stroke: rgba(246, 191, 27, 0.5);
+      stroke-width: 1;
+      stroke-dasharray: 2 3;
+    }
+
+    .graph-seed-dot {
+      fill: rgba(246, 191, 27, 0.35);
+      stroke: rgba(255, 255, 255, 0.4);
+      stroke-width: 1;
+    }
+
+    .graph-legend-ghost-key {
+      color: rgba(246, 191, 27, 0.55);
+      font-weight: 600;
+    }
+
+    .graph-legend-sup-key {
+      color: #f6bf1b;
+      font-weight: 600;
+    }
+
+    .graph-panel {
+      position: fixed;
+      bottom: 12px;
+      left: 12px;
+      width: min(480px, calc(var(--sw) * 0.35));
+      z-index: 20;
+    }
+
+    .graph-panel-inner {
+      width: 100%;
+      background: #213148;
+      border-radius: 32px;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      height: 345px;
+      transition: height 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .graph-panel.collapsed .graph-panel-inner {
+      height: 48px;
+    }
+
+    .graph-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 20px;
+      flex-shrink: 0;
+      order: -1;
+    }
+
+    .graph-panel.collapsed .graph-header {
+      order: 0;
+    }
+
+    .graph-title {
+      color: rgba(255, 255, 255, 0.9);
+      font-size: 13px;
+      font-weight: 600;
+      letter-spacing: 0.3px;
+    }
+
+    .graph-toggle {
+      width: 28px;
+      height: 28px;
+      border: none;
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 8px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background 0.2s ease;
+    }
+
+    .graph-toggle:hover {
+      background: rgba(255, 255, 255, 0.2);
+    }
+
+    .graph-toggle svg {
+      width: 14px;
+      height: 14px;
+      fill: none;
+      stroke: rgba(255, 255, 255, 0.8);
+      stroke-width: 2;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .graph-panel.collapsed .graph-toggle svg {
+      transform: rotate(180deg);
+    }
+
+    .graph-legend {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 4px 8px;
+      padding: 0 20px 10px;
+      flex-shrink: 0;
+      color: rgba(255, 255, 255, 0.7);
+      font-size: 11px;
+      opacity: 1;
+      transition: opacity 0.3s ease;
+    }
+
+    .graph-panel.collapsed .graph-legend {
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .graph-legend-blue {
+      color: #4da6ff;
+      font-weight: 600;
+    }
+
+    .graph-legend-yellow {
+      color: #f6bf1b;
+      font-weight: 600;
+    }
+
+    .graph-legend-divider {
+      color: rgba(255, 255, 255, 0.3);
+    }
+
+    .graph-content {
+      flex: 1;
+      padding: 0 20px 20px;
+      position: relative;
+      min-height: 0;
+      opacity: 1;
+      transition: opacity 0.3s ease;
+    }
+
+    .graph-panel.collapsed .graph-content {
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .graph-svg {
+      width: 100%;
+      height: 100%;
+      cursor: ew-resize;
+      touch-action: none;
+    }
+
+    .graph-svg.scrubbing .graph-playhead {
+      opacity: 1;
+    }
+
+    .graph-axis-label {
+      font-size: 10px;
+      fill: rgba(255, 255, 255, 0.5);
+    }
+
+    .graph-segment-line {
+      stroke: rgba(255, 255, 255, 0.16);
+      stroke-width: 1;
+    }
+
+    .graph-segment-label {
+      font-size: 9px;
+      fill: rgba(255, 255, 255, 0.4);
+    }
+
+    .graph-grid-line {
+      stroke: rgba(255, 255, 255, 0.08);
+      stroke-width: 1;
+    }
+
+    .graph-curve {
+      fill: none;
+      stroke: #4da6ff;
+      stroke-width: 2.5;
+      stroke-linecap: round;
+    }
+
+    .graph-curve-fill {
+      fill: url(#graph-gradient);
+      opacity: 0.2;
+    }
+
+    .graph-playhead {
+      stroke: #fff;
+      stroke-width: 1.5;
+      stroke-dasharray: 4 3;
+      opacity: 0.7;
+    }
+
+    .graph-playhead-dot {
+      fill: #4da6ff;
+      stroke: #fff;
+      stroke-width: 2;
+    }
+
+    .graph-user-curve {
+      fill: none;
+      stroke: #f6bf1b;
+      stroke-width: 2.5;
+      stroke-linecap: round;
+    }
+
+    .graph-user-dot {
+      fill: #f6bf1b;
+      stroke: #fff;
+      stroke-width: 1.5;
+    }
+
+    .graph-locked-line {
+      stroke: #fff;
+      stroke-width: 1.5;
+      stroke-dasharray: 6 4;
+      opacity: 0;
+      transition: opacity 0.3s ease;
+    }
+
+    .graph-locked-line.visible {
+      opacity: 0.7;
+    }
+
+    .graph-curve.dimmed {
+      opacity: 0.3;
+    }
+
+    .graph-curve-fill.dimmed {
+      opacity: 0.08;
+    }
+  </style>
+</head>
+<body>
+  <div class="stage" id="stage">
+
+  <div class="scene-container">
+    <div class="scene-layer active" id="scene-1"><img src="assets/Scene-01-005lux.webp" alt=""></div>
+    <div class="scene-layer" id="scene-2"><img src="assets/Scene-02-070lux.webp" alt=""></div>
+    <div class="scene-layer" id="scene-3"><img src="assets/Scene-03-225lux.webp" alt=""></div>
+    <div class="scene-layer" id="scene-4"><img src="assets/Scene-04-300lux.webp" alt=""></div>
+    <div class="scene-layer" id="scene-5"><img src="assets/Scene-05-225lux.webp" alt=""></div>
+    <div class="scene-layer" id="scene-6"><img src="assets/Scene-02-070lux.webp" alt=""></div>
+    <div class="scene-layer" id="scene-7"><img src="assets/Scene-01-005lux.webp" alt=""></div>
+
+    <div class="device-container">
+      <div class="clock-face">
+        <img class="clock-face-bg clock-face-day" id="clock-face-day" src="assets/clockface.svg" alt="Clock face">
+        <img class="clock-face-bg clock-face-night" id="clock-face-night" src="assets/clockface-night.svg" alt="Night clock face">
+        <div class="clock-hands">
+          <div class="clock-hand hand-second" id="hand-second"></div>
+          <div class="clock-hand hand-minute" id="hand-minute"></div>
+          <div class="clock-hand hand-hour" id="hand-hour"></div>
+        </div>
+        <div class="device-scrim" id="device-scrim"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="mode-section">
+    <div class="mode-header">Adaptive Brightness</div>
+    <div class="mode-toggle" data-mode="absolute">
+      <div class="mode-toggle-indicator" id="mode-indicator"></div>
+      <button class="mode-toggle-btn" id="mode-btn-relative">Relative</button>
+      <button class="mode-toggle-btn active" id="mode-btn-absolute">Absolute</button>
+    </div>
+  </div>
+
+  <div class="timeline-container">
+    <div class="lux-display">
+      <button class="play-btn" id="play-btn" aria-label="Play/Pause">
+        <svg class="icon-play" viewBox="0 0 24 24"><polygon points="6,3 20,12 6,21" /></svg>
+        <svg class="icon-pause" viewBox="0 0 24 24"><line x1="7" y1="4" x2="7" y2="20"/><line x1="17" y1="4" x2="17" y2="20"/></svg>
+      </button>
+      <span class="lux-value" id="lux-value">0</span><span class="lux-unit">lux</span>
+    </div>
+    <div class="timeline-track">
+      <div class="timeline-line"></div>
+      <input type="range" class="timeline-slider" id="timeline-slider" min="0" max="100" step="0.1" value="16">
+    </div>
+    <div class="timeline-labels">
+      <span>6 AM</span>
+      <span>9 AM</span>
+      <span>12 PM</span>
+      <span>3 PM</span>
+      <span>6 PM</span>
+    </div>
+  </div>
+
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+    <symbol id="icon-sun" viewBox="0 0 24.2838 24.2838">
+      <path fill-rule="evenodd" clip-rule="evenodd" d="M10.9277 0H13.3561V4.85676H10.9277V0ZM15.1774 12.1419C15.1774 10.4654 13.8183 9.10642 12.1419 9.10642C10.4654 9.10642 9.10642 10.4654 9.10642 12.1419C9.10642 13.8183 10.4654 15.1774 12.1419 15.1774C13.8183 15.1774 15.1774 13.8183 15.1774 12.1419ZM17.6057 12.1419C17.6057 9.12429 15.1595 6.67804 12.1419 6.67804C9.12429 6.67804 6.67804 9.12429 6.67804 12.1419C6.67804 15.1595 9.12429 17.6057 12.1419 17.6057C15.1595 17.6057 17.6057 15.1595 17.6057 12.1419ZM13.3561 24.2838V19.427H10.9277V24.2838H13.3561ZM24.2838 13.3561H19.427V10.9277H24.2838V13.3561ZM4.85676 13.3561V10.9277H0V13.3561H4.85676ZM2.69754 4.41566L4.41466 2.69854L7.84891 6.13279L6.13178 7.84991L2.69754 4.41566ZM18.152 16.4341L16.4348 18.1512L19.8691 21.5854L21.5862 19.8683L18.152 16.4341ZM21.5862 4.41566L19.8691 2.69854L16.4349 6.13279L18.152 7.84991L21.5862 4.41566ZM6.13183 16.4341L7.84895 18.1512L4.4147 21.5854L2.69758 19.8683L6.13183 16.4341Z"/>
+    </symbol>
+  </svg>
+
+  <div class="right-rail">
+
+  <div class="brightness-container">
+    <div class="perceptual-toggle checked" id="perceptual-toggle" role="checkbox"
+         tabindex="0" aria-checked="true">
+      <span class="perceptual-box" aria-hidden="true">
+        <svg viewBox="0 0 12 12"><polyline points="2,6.4 4.7,9 10,3.4"/></svg>
+      </span>
+      <span class="perceptual-label">Perceptual Slider<span class="perceptual-sub perceptual-rec">Recommended &middot; vs. mathematical</span></span>
+    </div>
+    <div class="brightness-track" id="brightness-track">
+      <span class="brightness-sun brightness-sun-off">
+        <svg viewBox="0 0 24.2838 24.2838"><use href="#icon-sun"/></svg>
+      </span>
+      <div class="brightness-clip" id="brightness-clip">
+        <div class="brightness-fill" id="brightness-fill">
+          <span class="brightness-sun brightness-sun-on">
+            <svg viewBox="0 0 24.2838 24.2838"><use href="#icon-sun"/></svg>
+          </span>
+        </div>
+      </div>
+    </div>
+    <button class="brightness-reset" id="brightness-reset" aria-label="Reset user preference">
+      <svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 1 3 6.7"/><polyline points="3 17 3 12 8 12"/></svg>
+    </button>
+  </div>
+
+  <div class="controls-stack">
+
+    <div class="adaptive-toggle-container" id="adaptive-toggle-container">
+      <div class="adaptive-toggle">
+        <span class="adaptive-toggle-label">Adaptive</span>
+        <div class="adaptive-switch" id="adaptive-switch">
+          <div class="adaptive-switch-bg"></div>
+          <div class="adaptive-switch-thumb"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="curve-mode-container hidden" id="rel-options">
+      <div class="curve-mode">
+        <button class="curve-radio active" id="rel-legacy">
+          <span class="curve-radio-dot"></span>
+          <span class="curve-radio-label">v1 &ndash; Legacy</span>
+        </button>
+        <button class="curve-radio" id="rel-v2">
+          <span class="curve-radio-dot"></span>
+          <span class="curve-radio-label">v2 &ndash; Reworked</span>
+        </button>
+      </div>
+    </div>
+
+    <div class="adaptive-toggle-container night-mode-toggle-container" id="night-mode-toggle-container">
+      <div class="adaptive-toggle">
+        <span class="adaptive-toggle-label">Night Mode</span>
+        <div class="adaptive-switch off" id="night-mode-switch">
+          <div class="adaptive-switch-bg"></div>
+          <div class="adaptive-switch-thumb"></div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  </div>
+  <div class="graph-panel" id="graph-panel">
+    <div class="graph-panel-inner">
+      <div class="graph-header">
+        <span class="graph-title">Device Brightness</span>
+        <button class="graph-toggle" id="graph-toggle" aria-label="Collapse panel">
+          <svg viewBox="0 0 14 14"><polyline points="3 5 7 9 11 5"/></svg>
+        </button>
+      </div>
+      <div class="graph-legend">
+        <span><span class="graph-legend-blue">Blue</span> = Default brightness curve</span>
+        <span class="graph-legend-divider">|</span>
+        <span><span class="graph-legend-yellow">Yellow</span> = <span id="graph-legend-yellow-text">Learned curve</span></span>
+        <span class="graph-legend-divider" id="graph-legend-sup-divider">|</span>
+        <span id="graph-legend-sup"><span class="graph-legend-sup-key">Outlined</span> = stored, suppressed</span>
+        <span class="graph-legend-divider" id="graph-legend-ghost-divider">|</span>
+        <span id="graph-legend-ghost"><span class="graph-legend-ghost-key">Faded</span> = replaced preference</span>
+      </div>
+      <div class="graph-content">
+        <svg class="graph-svg" id="graph-svg" viewBox="0 0 440 230" preserveAspectRatio="none">
+          <defs>
+            <linearGradient id="graph-gradient" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stop-color="#4da6ff" stop-opacity="0.4"/>
+              <stop offset="100%" stop-color="#4da6ff" stop-opacity="0"/>
+            </linearGradient>
+          </defs>
+          <line class="graph-grid-line" x1="40" y1="20" x2="40" y2="200"/>
+          <line class="graph-grid-line" x1="40" y1="200" x2="420" y2="200"/>
+          <line class="graph-grid-line" x1="40" y1="155" x2="420" y2="155"/>
+          <line class="graph-grid-line" x1="40" y1="110" x2="420" y2="110"/>
+          <line class="graph-grid-line" x1="40" y1="65" x2="420" y2="65"/>
+          <line class="graph-grid-line" x1="40" y1="20" x2="420" y2="20"/>
+          <text class="graph-axis-label" x="4" y="204" text-anchor="start">0%</text>
+          <text class="graph-axis-label" x="4" y="159" text-anchor="start">25%</text>
+          <text class="graph-axis-label" x="4" y="114" text-anchor="start">50%</text>
+          <text class="graph-axis-label" x="4" y="69" text-anchor="start">75%</text>
+          <text class="graph-axis-label" x="4" y="24" text-anchor="start">100%</text>
+          <text class="graph-axis-label" x="40" y="218" text-anchor="middle">0</text>
+          <text class="graph-axis-label" x="166" y="218" text-anchor="middle">100</text>
+          <text class="graph-axis-label" x="293" y="218" text-anchor="middle">200</text>
+          <text class="graph-axis-label" x="420" y="218" text-anchor="middle">300</text>
+          <text class="graph-axis-label" x="230" y="230" text-anchor="middle">lux</text>
+          <path class="graph-band" id="graph-band" d=""/>
+          <g id="graph-segments"></g>
+          <path class="graph-curve-fill" id="graph-curve-fill"/>
+          <path class="graph-curve" id="graph-curve"/>
+          <line class="graph-playhead" id="graph-playhead" x1="40" y1="20" x2="40" y2="200"/>
+          <path class="graph-user-curve" id="graph-user-curve" d=""/>
+          <line class="graph-locked-line" id="graph-locked-line" x1="40" y1="100" x2="420" y2="100"/>
+          <g id="graph-user-dots"></g>
+          <circle class="graph-playhead-dot" id="graph-playhead-dot" cx="40" cy="200" r="5"/>
+        </svg>
+      </div>
+    </div>
+  </div>
+
+  </div>
+  <div class="rotate-hint">Rotate your phone for a larger view</div>
+
+  <script src="app.js"></script>
+</body>
+</html>
